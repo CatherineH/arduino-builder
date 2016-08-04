@@ -30,27 +30,27 @@
 package test
 
 import (
+	"path/filepath"
+	"sort"
+	"testing"
+
 	"arduino.cc/builder"
 	"arduino.cc/builder/constants"
 	"arduino.cc/builder/types"
 	"github.com/stretchr/testify/require"
-	"path/filepath"
-	"sort"
-	"testing"
 )
 
 func TestLoadLibrariesAVR(t *testing.T) {
 	DownloadCoresAndToolsAndLibraries(t)
 
-	context := make(map[string]interface{})
-
-	context[constants.CTX_HARDWARE_FOLDERS] = []string{filepath.Join("..", "hardware"), "hardware", "downloaded_hardware"}
-	context[constants.CTX_FQBN] = "arduino:avr:leonardo"
-	context[constants.CTX_BUILT_IN_LIBRARIES_FOLDERS] = []string{"downloaded_libraries"}
-	context[constants.CTX_OTHER_LIBRARIES_FOLDERS] = []string{"libraries"}
+	ctx := &types.Context{
+		HardwareFolders:         []string{filepath.Join("..", "hardware"), "hardware", "downloaded_hardware"},
+		BuiltInLibrariesFolders: []string{"downloaded_libraries"},
+		OtherLibrariesFolders:   []string{"libraries"},
+		FQBN: "arduino:avr:leonardo",
+	}
 
 	commands := []types.Command{
-		&builder.SetupHumanLoggerIfMissing{},
 		&builder.AddAdditionalEntriesToContext{},
 		&builder.HardwareLoader{},
 		&builder.TargetBoardResolver{},
@@ -58,18 +58,18 @@ func TestLoadLibrariesAVR(t *testing.T) {
 	}
 
 	for _, command := range commands {
-		err := command.Run(context)
+		err := command.Run(ctx)
 		NoError(t, err)
 	}
 
-	librariesFolders := context[constants.CTX_LIBRARIES_FOLDERS].([]string)
+	librariesFolders := ctx.LibrariesFolders
 	require.Equal(t, 3, len(librariesFolders))
 	require.Equal(t, Abs(t, filepath.Join("downloaded_libraries")), librariesFolders[0])
 	require.Equal(t, Abs(t, filepath.Join("downloaded_hardware", "arduino", "avr", "libraries")), librariesFolders[1])
 	require.Equal(t, Abs(t, filepath.Join("libraries")), librariesFolders[2])
 
-	libraries := context[constants.CTX_LIBRARIES].([]*types.Library)
-	require.Equal(t, 20, len(libraries))
+	libraries := ctx.Libraries
+	require.Equal(t, 24, len(libraries))
 
 	sort.Sort(ByLibraryName(libraries))
 
@@ -131,7 +131,7 @@ func TestLoadLibrariesAVR(t *testing.T) {
 	idx++
 	require.Equal(t, "Wire", libraries[idx].Name)
 
-	headerToLibraries := context[constants.CTX_HEADER_TO_LIBRARIES].(map[string][]*types.Library)
+	headerToLibraries := ctx.HeaderToLibraries
 	require.Equal(t, 2, len(headerToLibraries["Audio.h"]))
 	require.Equal(t, "Audio", headerToLibraries["Audio.h"][0].Name)
 	require.Equal(t, "FakeAudio", headerToLibraries["Audio.h"][1].Name)
@@ -152,15 +152,14 @@ func TestLoadLibrariesAVR(t *testing.T) {
 func TestLoadLibrariesSAM(t *testing.T) {
 	DownloadCoresAndToolsAndLibraries(t)
 
-	context := make(map[string]interface{})
-
-	context[constants.CTX_HARDWARE_FOLDERS] = []string{filepath.Join("..", "hardware"), "hardware", "downloaded_hardware"}
-	context[constants.CTX_FQBN] = "arduino:sam:arduino_due_x_dbg"
-	context[constants.CTX_BUILT_IN_LIBRARIES_FOLDERS] = []string{"downloaded_libraries"}
-	context[constants.CTX_OTHER_LIBRARIES_FOLDERS] = []string{"libraries"}
+	ctx := &types.Context{
+		HardwareFolders:         []string{filepath.Join("..", "hardware"), "hardware", "downloaded_hardware"},
+		BuiltInLibrariesFolders: []string{"downloaded_libraries"},
+		OtherLibrariesFolders:   []string{"libraries"},
+		FQBN: "arduino:sam:arduino_due_x_dbg",
+	}
 
 	commands := []types.Command{
-		&builder.SetupHumanLoggerIfMissing{},
 		&builder.AddAdditionalEntriesToContext{},
 		&builder.HardwareLoader{},
 		&builder.TargetBoardResolver{},
@@ -168,18 +167,18 @@ func TestLoadLibrariesSAM(t *testing.T) {
 	}
 
 	for _, command := range commands {
-		err := command.Run(context)
+		err := command.Run(ctx)
 		NoError(t, err)
 	}
 
-	librariesFolders := context[constants.CTX_LIBRARIES_FOLDERS].([]string)
+	librariesFolders := ctx.LibrariesFolders
 	require.Equal(t, 3, len(librariesFolders))
 	require.Equal(t, Abs(t, filepath.Join("downloaded_libraries")), librariesFolders[0])
 	require.Equal(t, Abs(t, filepath.Join("downloaded_hardware", "arduino", "sam", "libraries")), librariesFolders[1])
 	require.Equal(t, Abs(t, filepath.Join("libraries")), librariesFolders[2])
 
-	libraries := context[constants.CTX_LIBRARIES].([]*types.Library)
-	require.Equal(t, 18, len(libraries))
+	libraries := ctx.Libraries
+	require.Equal(t, 22, len(libraries))
 
 	sort.Sort(ByLibraryName(libraries))
 
@@ -218,7 +217,7 @@ func TestLoadLibrariesSAM(t *testing.T) {
 	idx++
 	require.Equal(t, "Wire", libraries[idx].Name)
 
-	headerToLibraries := context[constants.CTX_HEADER_TO_LIBRARIES].(map[string][]*types.Library)
+	headerToLibraries := ctx.HeaderToLibraries
 
 	require.Equal(t, 2, len(headerToLibraries["Audio.h"]))
 	libraries = headerToLibraries["Audio.h"]
@@ -236,15 +235,14 @@ func TestLoadLibrariesSAM(t *testing.T) {
 func TestLoadLibrariesAVRNoDuplicateLibrariesFolders(t *testing.T) {
 	DownloadCoresAndToolsAndLibraries(t)
 
-	context := make(map[string]interface{})
-
-	context[constants.CTX_HARDWARE_FOLDERS] = []string{filepath.Join("..", "hardware"), "hardware", "downloaded_hardware"}
-	context[constants.CTX_FQBN] = "arduino:avr:leonardo"
-	context[constants.CTX_BUILT_IN_LIBRARIES_FOLDERS] = []string{"downloaded_libraries"}
-	context[constants.CTX_OTHER_LIBRARIES_FOLDERS] = []string{"libraries", filepath.Join("downloaded_hardware", "arduino", "avr", "libraries")}
+	ctx := &types.Context{
+		HardwareFolders:         []string{filepath.Join("..", "hardware"), "hardware", "downloaded_hardware"},
+		BuiltInLibrariesFolders: []string{"downloaded_libraries"},
+		OtherLibrariesFolders:   []string{"libraries", filepath.Join("downloaded_hardware", "arduino", "avr", "libraries")},
+		FQBN: "arduino:avr:leonardo",
+	}
 
 	commands := []types.Command{
-		&builder.SetupHumanLoggerIfMissing{},
 		&builder.AddAdditionalEntriesToContext{},
 		&builder.HardwareLoader{},
 		&builder.TargetBoardResolver{},
@@ -252,11 +250,11 @@ func TestLoadLibrariesAVRNoDuplicateLibrariesFolders(t *testing.T) {
 	}
 
 	for _, command := range commands {
-		err := command.Run(context)
+		err := command.Run(ctx)
 		NoError(t, err)
 	}
 
-	librariesFolders := context[constants.CTX_LIBRARIES_FOLDERS].([]string)
+	librariesFolders := ctx.LibrariesFolders
 	require.Equal(t, 3, len(librariesFolders))
 	require.Equal(t, Abs(t, filepath.Join("downloaded_libraries")), librariesFolders[0])
 	require.Equal(t, Abs(t, filepath.Join("downloaded_hardware", "arduino", "avr", "libraries")), librariesFolders[1])
@@ -266,15 +264,14 @@ func TestLoadLibrariesAVRNoDuplicateLibrariesFolders(t *testing.T) {
 func TestLoadLibrariesMyAVRPlatform(t *testing.T) {
 	DownloadCoresAndToolsAndLibraries(t)
 
-	context := make(map[string]interface{})
-
-	context[constants.CTX_HARDWARE_FOLDERS] = []string{filepath.Join("..", "hardware"), "hardware", "user_hardware", "downloaded_hardware"}
-	context[constants.CTX_FQBN] = "my_avr_platform:avr:custom_yun"
-	context[constants.CTX_BUILT_IN_LIBRARIES_FOLDERS] = []string{"downloaded_libraries"}
-	context[constants.CTX_OTHER_LIBRARIES_FOLDERS] = []string{"libraries", filepath.Join("downloaded_hardware", "arduino", "avr", "libraries")}
+	ctx := &types.Context{
+		HardwareFolders:         []string{filepath.Join("..", "hardware"), "hardware", "user_hardware", "downloaded_hardware"},
+		BuiltInLibrariesFolders: []string{"downloaded_libraries"},
+		OtherLibrariesFolders:   []string{"libraries", filepath.Join("downloaded_hardware", "arduino", "avr", "libraries")},
+		FQBN: "my_avr_platform:avr:custom_yun",
+	}
 
 	commands := []types.Command{
-		&builder.SetupHumanLoggerIfMissing{},
 		&builder.AddAdditionalEntriesToContext{},
 		&builder.HardwareLoader{},
 		&builder.TargetBoardResolver{},
@@ -282,11 +279,11 @@ func TestLoadLibrariesMyAVRPlatform(t *testing.T) {
 	}
 
 	for _, command := range commands {
-		err := command.Run(context)
+		err := command.Run(ctx)
 		NoError(t, err)
 	}
 
-	librariesFolders := context[constants.CTX_LIBRARIES_FOLDERS].([]string)
+	librariesFolders := ctx.LibrariesFolders
 	require.Equal(t, 4, len(librariesFolders))
 	require.Equal(t, Abs(t, filepath.Join("downloaded_libraries")), librariesFolders[0])
 	require.Equal(t, Abs(t, filepath.Join("downloaded_hardware", "arduino", "avr", "libraries")), librariesFolders[1])

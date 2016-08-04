@@ -1,6 +1,8 @@
 /*
  * This file is part of Arduino Builder.
  *
+ * Copyright 2016 Arduino LLC (http://www.arduino.cc/)
+ *
  * Arduino Builder is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -23,45 +25,31 @@
  * the GNU General Public License.  This exception does not however
  * invalidate any other reasons why the executable file might be covered by
  * the GNU General Public License.
- *
- * Copyright 2015 Arduino LLC (http://www.arduino.cc/)
  */
 
-package builder
+package timeutils
 
-import (
-	"arduino.cc/builder/constants"
-	"path/filepath"
-	"strings"
-)
+import "time"
 
-type ExternalIncludeReplacer struct {
-	SourceKey string
-	TargetKey string
-	From      string
-	To        string
+// TimezoneOffsetNoDST returns the timezone offset without the DST component
+func TimezoneOffsetNoDST(t time.Time) int {
+	_, winterOffset := time.Date(t.Year(), 1, 1, 0, 0, 0, 0, t.Location()).Zone()
+	_, summerOffset := time.Date(t.Year(), 7, 1, 0, 0, 0, 0, t.Location()).Zone()
+	if winterOffset > summerOffset {
+		winterOffset, summerOffset = summerOffset, winterOffset
+	}
+	return winterOffset
 }
 
-func (s *ExternalIncludeReplacer) Run(context map[string]interface{}) error {
-	source := context[s.SourceKey].(string)
-	nonAbsoluteIncludes := findNonAbsoluteIncludes(context[constants.CTX_INCLUDES].([]string))
-
-	for _, include := range nonAbsoluteIncludes {
-		source = strings.Replace(source, s.From+"<"+include+">", s.To+"<"+include+">", -1)
-		source = strings.Replace(source, s.From+"\""+include+"\"", s.To+"\""+include+"\"", -1)
-	}
-
-	context[s.TargetKey] = source
-
-	return nil
+// DaylightSavingsOffset returns the DST offset of the specified time
+func DaylightSavingsOffset(t time.Time) int {
+	_, offset := t.Zone()
+	return offset - TimezoneOffsetNoDST(t)
 }
 
-func findNonAbsoluteIncludes(includes []string) []string {
-	var nonAbsoluteIncludes []string
-	for _, include := range includes {
-		if !filepath.IsAbs(include) {
-			nonAbsoluteIncludes = append(nonAbsoluteIncludes, include)
-		}
-	}
-	return nonAbsoluteIncludes
+// LocalUnix returns the unix timestamp of the specified time with the
+// local timezone offset and DST added
+func LocalUnix(t time.Time) int64 {
+	_, offset := t.Zone()
+	return t.Unix() + int64(offset)
 }

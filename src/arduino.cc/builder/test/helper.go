@@ -33,29 +33,29 @@ package test
 import (
 	"arduino.cc/builder/constants"
 	"arduino.cc/builder/types"
+	"arduino.cc/builder/utils"
 	"bytes"
 	"fmt"
 	"github.com/go-errors/errors"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"path/filepath"
-	"strings"
 	"testing"
 	"text/template"
 )
 
-func LoadAndInterpolate(t *testing.T, filename string, context map[string]interface{}) string {
+func LoadAndInterpolate(t *testing.T, filename string, ctx *types.Context) string {
 	funcsMap := template.FuncMap{
-		"EscapeBackSlashes": func(s string) string {
-			return strings.Replace(s, "\\", "\\\\", -1)
-		},
+		"QuoteCppString": utils.QuoteCppString,
 	}
 
 	tpl, err := template.New(filepath.Base(filename)).Funcs(funcsMap).ParseFiles(filename)
 	NoError(t, err)
 
 	var buf bytes.Buffer
-	err = tpl.Execute(&buf, context)
+	data := make(map[string]interface{})
+	data["sketch"] = ctx.Sketch
+	err = tpl.Execute(&buf, data)
 	NoError(t, err)
 
 	return buf.String()
@@ -77,10 +77,10 @@ func NoError(t *testing.T, err error, msgAndArgs ...interface{}) {
 	}
 }
 
-func SetupBuildPath(t *testing.T, context map[string]interface{}) string {
+func SetupBuildPath(t *testing.T, ctx *types.Context) string {
 	buildPath, err := ioutil.TempDir(constants.EMPTY_STRING, "test")
 	NoError(t, err)
-	context[constants.CTX_BUILD_PATH] = buildPath
+	ctx.BuildPath = buildPath
 	return buildPath
 }
 
@@ -94,14 +94,4 @@ func (s ByLibraryName) Swap(i, j int) {
 }
 func (s ByLibraryName) Less(i, j int) bool {
 	return s[i].Name < s[j].Name
-}
-
-type CopyContextKeys struct {
-	From string
-	To   string
-}
-
-func (s *CopyContextKeys) Run(context map[string]interface{}) error {
-	context[s.To] = context[s.From]
-	return nil
 }

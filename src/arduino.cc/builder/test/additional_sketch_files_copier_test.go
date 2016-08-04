@@ -55,22 +55,21 @@ func (s ByFileInfoName) Less(i, j int) bool {
 }
 
 func TestCopyOtherFiles(t *testing.T) {
-	context := make(map[string]interface{})
+	ctx := &types.Context{
+		SketchLocation: filepath.Join("sketch1", "sketch.ino"),
+	}
 
-	buildPath := SetupBuildPath(t, context)
+	buildPath := SetupBuildPath(t, ctx)
 	defer os.RemoveAll(buildPath)
 
-	context[constants.CTX_SKETCH_LOCATION] = filepath.Join("sketch1", "sketch.ino")
-
 	commands := []types.Command{
-		&builder.SetupHumanLoggerIfMissing{},
 		&builder.AddAdditionalEntriesToContext{},
 		&builder.SketchLoader{},
 		&builder.AdditionalSketchFilesCopier{},
 	}
 
 	for _, command := range commands {
-		err := command.Run(context)
+		err := command.Run(ctx)
 		NoError(t, err)
 	}
 
@@ -84,31 +83,30 @@ func TestCopyOtherFiles(t *testing.T) {
 	sort.Sort(ByFileInfoName(files))
 	require.Equal(t, "header.h", files[0].Name())
 	require.Equal(t, "s_file.S", files[1].Name())
-	require.Equal(t, "subfolder", files[2].Name())
+	require.Equal(t, "src", files[2].Name())
 
-	files, err1 = gohasissues.ReadDir(filepath.Join(buildPath, constants.FOLDER_SKETCH, "subfolder"))
+	files, err1 = gohasissues.ReadDir(filepath.Join(buildPath, constants.FOLDER_SKETCH, "src"))
 	NoError(t, err1)
 	require.Equal(t, 1, len(files))
 	require.Equal(t, "helper.h", files[0].Name())
 }
 
 func TestCopyOtherFilesOnlyIfChanged(t *testing.T) {
-	context := make(map[string]interface{})
+	ctx := &types.Context{
+		SketchLocation: filepath.Join("sketch1", "sketch.ino"),
+	}
 
-	buildPath := SetupBuildPath(t, context)
+	buildPath := SetupBuildPath(t, ctx)
 	defer os.RemoveAll(buildPath)
 
-	context[constants.CTX_SKETCH_LOCATION] = filepath.Join("sketch1", "sketch.ino")
-
 	commands := []types.Command{
-		&builder.SetupHumanLoggerIfMissing{},
 		&builder.AddAdditionalEntriesToContext{},
 		&builder.SketchLoader{},
 		&builder.AdditionalSketchFilesCopier{},
 	}
 
 	for _, command := range commands {
-		err := command.Run(context)
+		err := command.Run(ctx)
 		NoError(t, err)
 	}
 
@@ -117,12 +115,13 @@ func TestCopyOtherFilesOnlyIfChanged(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	context = make(map[string]interface{})
-	context[constants.CTX_BUILD_PATH] = buildPath
-	context[constants.CTX_SKETCH_LOCATION] = filepath.Join("sketch1", "sketch.ino")
+	ctx = &types.Context{
+		SketchLocation: filepath.Join("sketch1", "sketch.ino"),
+		BuildPath:      buildPath,
+	}
 
 	for _, command := range commands {
-		err := command.Run(context)
+		err := command.Run(ctx)
 		NoError(t, err)
 	}
 

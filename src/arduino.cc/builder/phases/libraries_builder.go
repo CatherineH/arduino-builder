@@ -30,49 +30,50 @@
 package phases
 
 import (
+	"os"
+	"path/filepath"
+
 	"arduino.cc/builder/builder_utils"
 	"arduino.cc/builder/constants"
 	"arduino.cc/builder/i18n"
-	"arduino.cc/builder/props"
 	"arduino.cc/builder/types"
 	"arduino.cc/builder/utils"
-	"os"
-	"path/filepath"
+	"arduino.cc/properties"
 )
 
 type LibrariesBuilder struct{}
 
-func (s *LibrariesBuilder) Run(context map[string]interface{}) error {
-	librariesBuildPath := context[constants.CTX_LIBRARIES_BUILD_PATH].(string)
-	buildProperties := context[constants.CTX_BUILD_PROPERTIES].(props.PropertiesMap)
-	includes := context[constants.CTX_INCLUDE_FOLDERS].([]string)
+func (s *LibrariesBuilder) Run(ctx *types.Context) error {
+	librariesBuildPath := ctx.LibrariesBuildPath
+	buildProperties := ctx.BuildProperties
+	includes := ctx.IncludeFolders
 	includes = utils.Map(includes, utils.WrapWithHyphenI)
-	libraries := context[constants.CTX_IMPORTED_LIBRARIES].([]*types.Library)
-	verbose := context[constants.CTX_VERBOSE].(bool)
-	warningsLevel := context[constants.CTX_WARNINGS_LEVEL].(string)
-	logger := context[constants.CTX_LOGGER].(i18n.Logger)
+	libraries := ctx.ImportedLibraries
+	verbose := ctx.Verbose
+	warningsLevel := ctx.WarningsLevel
+	logger := ctx.GetLogger()
 
 	err := utils.EnsureFolderExists(librariesBuildPath)
 	if err != nil {
-		return utils.WrapError(err)
+		return i18n.WrapError(err)
 	}
 
 	objectFiles, err := compileLibraries(libraries, librariesBuildPath, buildProperties, includes, verbose, warningsLevel, logger)
 	if err != nil {
-		return utils.WrapError(err)
+		return i18n.WrapError(err)
 	}
 
-	context[constants.CTX_OBJECT_FILES_LIBRARIES] = objectFiles
+	ctx.LibrariesObjectFiles = objectFiles
 
 	return nil
 }
 
-func compileLibraries(libraries []*types.Library, buildPath string, buildProperties props.PropertiesMap, includes []string, verbose bool, warningsLevel string, logger i18n.Logger) ([]string, error) {
+func compileLibraries(libraries []*types.Library, buildPath string, buildProperties properties.Map, includes []string, verbose bool, warningsLevel string, logger i18n.Logger) ([]string, error) {
 	objectFiles := []string{}
 	for _, library := range libraries {
 		libraryObjectFiles, err := compileLibrary(library, buildPath, buildProperties, includes, verbose, warningsLevel, logger)
 		if err != nil {
-			return nil, utils.WrapError(err)
+			return nil, i18n.WrapError(err)
 		}
 		objectFiles = append(objectFiles, libraryObjectFiles...)
 	}
@@ -81,43 +82,47 @@ func compileLibraries(libraries []*types.Library, buildPath string, buildPropert
 
 }
 
-func compileLibrary(library *types.Library, buildPath string, buildProperties props.PropertiesMap, includes []string, verbose bool, warningsLevel string, logger i18n.Logger) ([]string, error) {
+func compileLibrary(library *types.Library, buildPath string, buildProperties properties.Map, includes []string, verbose bool, warningsLevel string, logger i18n.Logger) ([]string, error) {
+	if verbose {
+		logger.Println(constants.LOG_LEVEL_INFO, "Compiling library \"{0}\"", library.Name)
+	}
 	libraryBuildPath := filepath.Join(buildPath, library.Name)
 
 	err := utils.EnsureFolderExists(libraryBuildPath)
 	if err != nil {
-		return nil, utils.WrapError(err)
+		return nil, i18n.WrapError(err)
 	}
 
 	objectFiles := []string{}
 	if library.Layout == types.LIBRARY_RECURSIVE {
 		objectFiles, err = builder_utils.CompileFilesRecursive(objectFiles, library.SrcFolder, libraryBuildPath, buildProperties, includes, verbose, warningsLevel, logger)
 		if err != nil {
-			return nil, utils.WrapError(err)
+			return nil, i18n.WrapError(err)
 		}
 		if library.DotALinkage {
 			archiveFile, err := builder_utils.ArchiveCompiledFiles(libraryBuildPath, library.Name+".a", objectFiles, buildProperties, verbose, logger)
 			if err != nil {
-				return nil, utils.WrapError(err)
+				return nil, i18n.WrapError(err)
 			}
 			objectFiles = []string{archiveFile}
 		}
 	} else {
 		utilitySourcePath := filepath.Join(library.SrcFolder, constants.LIBRARY_FOLDER_UTILITY)
-		_, utilitySourcePathErr := os.Stat(utilitySourcePath)
-		if utilitySourcePathErr == nil {
+		stat, err := os.Stat(utilitySourcePath)
+		haveUtilityDir := err == nil && stat.IsDir()
+		if haveUtilityDir {
 			includes = append(includes, utils.WrapWithHyphenI(utilitySourcePath))
 		}
 		objectFiles, err = builder_utils.CompileFiles(objectFiles, library.SrcFolder, false, libraryBuildPath, buildProperties, includes, verbose, warningsLevel, logger)
 		if err != nil {
-			return nil, utils.WrapError(err)
+			return nil, i18n.WrapError(err)
 		}
 
-		if utilitySourcePathErr == nil {
+		if haveUtilityDir {
 			utilityBuildPath := filepath.Join(libraryBuildPath, constants.LIBRARY_FOLDER_UTILITY)
 			objectFiles, err = builder_utils.CompileFiles(objectFiles, utilitySourcePath, false, utilityBuildPath, buildProperties, includes, verbose, warningsLevel, logger)
 			if err != nil {
-				return nil, utils.WrapError(err)
+				return nil, i18n.WrapError(err)
 			}
 		}
 	}

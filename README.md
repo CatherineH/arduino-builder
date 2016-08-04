@@ -1,4 +1,4 @@
-## Arduino Builder
+## Arduino Builder [![Build Status](https://travis-ci.org/arduino/arduino-builder.svg?branch=master)](https://travis-ci.org/arduino/arduino-builder)
 
 A command line tool for compiling Arduino sketches
 
@@ -55,7 +55,7 @@ See [Doing continuous integration with arduino builder](https://github.com/ardui
 
 ### Building from source
 
-You need [Go 1.4.3](https://golang.org/dl/#go1.4.3).
+You need [Go 1.5.4](https://golang.org/dl/#go1.5.4).
 
 Repo root contains the script `setup_go_env_vars`. Use it as is or as a template for setting up Go environment variables.
 
@@ -67,9 +67,7 @@ Once done, run the following commands:
 go get github.com/go-errors/errors
 go get github.com/stretchr/testify
 go get github.com/jstemmer/go-junit-report
-go get golang.org/x/codereview/patch
-go get golang.org/x/tools/cmd/vet
-go build
+go build arduino.cc/arduino-builder
 ```
 
 ### TDD
@@ -77,13 +75,36 @@ go build
 In order to run the tests, type:
 
 ```
-go test -timeout 60m -v ./src/arduino.cc/builder/test/...
+go test arduino.cc/...
+```
+
+This runs all tests, showing any failures and a summary at the end.
+Add the -v option to show each test as it is being ran. Currently,
+arduino-builder itself also generates copious output, even for
+non-failing testcases and without -v, and testing does not stop at the
+first failure, so you probably want to redirect test output so you can
+scroll back to find any failures.
+
+To run a single test, use the -run option, which accepts a regular
+expression (see also go help testflag).
+
+```
+go test arduino.cc/... -run 'TestBuilderEmptySketch'
+go test arduino.cc/... -run 'TestPrototypesAdder.*'
 ```
 
 In jenkins, use
 ```
-go test -timeout 60m -v ./src/arduino.cc/builder/test/... | bin/go-junit-report > report.xml
+go test -v arduino.cc/... | bin/go-junit-report > report.xml
 ```
+
+The first time you run the tests, some needed files (toolchains and
+source files) will be downloaded, which needs about 1GB of space (at the
+time of writing). If you have a slow connection, this download might
+exceed the default 10 minute timeout for a single test. If you run into
+this, add `-timeout 60m` or similar to the commandline to extend the
+timeout. If you are running on slower system (like a rasbperry pi),
+increasing the timeout might be needed as well.
 
 ### License and Copyright
 

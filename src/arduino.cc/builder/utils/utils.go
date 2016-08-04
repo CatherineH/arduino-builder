@@ -33,14 +33,13 @@ import (
 	"arduino.cc/builder/constants"
 	"arduino.cc/builder/gohasissues"
 	"arduino.cc/builder/i18n"
+	"arduino.cc/builder/types"
 	"crypto/md5"
 	"encoding/hex"
-	"github.com/go-errors/errors"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 )
@@ -61,27 +60,12 @@ func KeysOfMapOfString(input map[string]string) []string {
 	return keys
 }
 
-func KeysOfMapOfStringBool(input map[string]bool) []string {
-	var keys []string
-	for key, _ := range input {
-		keys = append(keys, key)
-	}
-	return keys
-}
-
-func MergeMapsOfStringBool(target map[string]bool, sources ...map[string]bool) map[string]bool {
-	for _, source := range sources {
-		for key, value := range source {
-			target[key] = value
-		}
-	}
-	return target
-}
-
 func PrettyOSName() string {
 	switch osName := runtime.GOOS; osName {
 	case "darwin":
 		return "macosx"
+	case "freebsd":
+		return "freebsd"
 	case "linux":
 		return "linux"
 	case "windows":
@@ -126,7 +110,7 @@ func ParseCommandLine(input string, logger i18n.Logger) ([]string, error) {
 	}
 
 	if escapingChar != constants.EMPTY_STRING {
-		return nil, ErrorfWithLogger(logger, constants.MSG_INVALID_QUOTING, escapingChar)
+		return nil, i18n.ErrorfWithLogger(logger, constants.MSG_INVALID_QUOTING, escapingChar)
 	}
 
 	return parts, nil
@@ -137,7 +121,7 @@ type filterFiles func([]os.FileInfo) []os.FileInfo
 func ReadDirFiltered(folder string, fn filterFiles) ([]os.FileInfo, error) {
 	files, err := gohasissues.ReadDir(folder)
 	if err != nil {
-		return nil, WrapError(err)
+		return nil, i18n.WrapError(err)
 	}
 	return fn(files), nil
 }
@@ -164,7 +148,7 @@ func FilterFilesWithExtension(extension string) filterFiles {
 	}
 }
 
-var SOURCE_CONTROL_FOLDERS = map[string]bool{"CVS": true, "RCS": true, ".git": true, ".svn": true, ".hg": true, ".bzr": true}
+var SOURCE_CONTROL_FOLDERS = map[string]bool{"CVS": true, "RCS": true, ".git": true, ".github": true, ".svn": true, ".hg": true, ".bzr": true}
 
 func IsSCCSOrHiddenFile(file os.FileInfo) bool {
 	return IsSCCSFile(file) || IsHiddenFile(file)
@@ -234,7 +218,7 @@ type argFilterFunc func(int, string, []string) bool
 func PrepareCommandFilteredArgs(pattern string, filter argFilterFunc, logger i18n.Logger) (*exec.Cmd, error) {
 	parts, err := ParseCommandLine(pattern, logger)
 	if err != nil {
-		return nil, WrapError(err)
+		return nil, i18n.WrapError(err)
 	}
 	command := parts[0]
 	parts = parts[1:]
@@ -256,33 +240,6 @@ func PrepareCommand(pattern string, logger i18n.Logger) (*exec.Cmd, error) {
 	return PrepareCommandFilteredArgs(pattern, filterEmptyArg, logger)
 }
 
-func WrapError(err error) error {
-	if err == nil {
-		return nil
-	}
-	return errors.Wrap(err, 0)
-}
-
-func Logger(context map[string]interface{}) i18n.Logger {
-	if MapHas(context, constants.CTX_LOGGER) {
-		return context[constants.CTX_LOGGER].(i18n.Logger)
-	}
-	return i18n.HumanLogger{}
-}
-
-func Errorf(context map[string]interface{}, format string, a ...interface{}) *errors.Error {
-	log := Logger(context)
-	return ErrorfWithLogger(log, format, a...)
-}
-
-func ErrorfWithLogger(log i18n.Logger, format string, a ...interface{}) *errors.Error {
-	if log.Name() == "machine" {
-		log.Fprintln(os.Stderr, constants.LOG_LEVEL_ERROR, format, a...)
-		return errors.Errorf(constants.EMPTY_STRING)
-	}
-	return errors.Errorf(i18n.Format(format, a...))
-}
-
 func MapHas(aMap map[string]interface{}, key string) bool {
 	_, ok := aMap[key]
 	return ok
@@ -291,13 +248,6 @@ func MapHas(aMap map[string]interface{}, key string) bool {
 func MapStringStringHas(aMap map[string]string, key string) bool {
 	_, ok := aMap[key]
 	return ok
-}
-
-func DebugLevel(context map[string]interface{}) int {
-	if MapHas(context, constants.CTX_DEBUG_LEVEL) && reflect.TypeOf(context[constants.CTX_DEBUG_LEVEL]).Kind() == reflect.Int {
-		return context[constants.CTX_DEBUG_LEVEL].(int)
-	}
-	return 0
 }
 
 func SliceToMapStringBool(keys []string, value bool) map[string]bool {
@@ -312,7 +262,7 @@ func AbsolutizePaths(files []string) ([]string, error) {
 	for idx, file := range files {
 		absFile, err := filepath.Abs(file)
 		if err != nil {
-			return nil, WrapError(err)
+			return nil, i18n.WrapError(err)
 		}
 		files[idx] = absFile
 	}
@@ -323,7 +273,7 @@ func AbsolutizePaths(files []string) ([]string, error) {
 func ReadFileToRows(file string) ([]string, error) {
 	bytes, err := ioutil.ReadFile(file)
 	if err != nil {
-		return nil, WrapError(err)
+		return nil, i18n.WrapError(err)
 	}
 	txt := string(bytes)
 	txt = strings.Replace(txt, "\r\n", "\n", -1)
@@ -334,7 +284,7 @@ func ReadFileToRows(file string) ([]string, error) {
 func TheOnlySubfolderOf(folder string) (string, error) {
 	subfolders, err := ReadDirFiltered(folder, FilterDirs)
 	if err != nil {
-		return constants.EMPTY_STRING, WrapError(err)
+		return constants.EMPTY_STRING, i18n.WrapError(err)
 	}
 
 	if len(subfolders) != 1 {
@@ -357,30 +307,48 @@ func FilterOutFoldersByNames(folders []os.FileInfo, names ...string) []os.FileIn
 	return filtered
 }
 
-type CheckFilePathFunc func(filePath string) bool
+type CheckExtensionFunc func(ext string) bool
 
-func CollectAllReadableFiles(collector *[]string, test CheckFilePathFunc) filepath.WalkFunc {
-	walkFunc := func(currentPath string, info os.FileInfo, err error) error {
+func FindFilesInFolder(files *[]string, folder string, extensions CheckExtensionFunc, recurse bool) error {
+	walkFunc := func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 
+		// Skip source control and hidden files and directories
+		if IsSCCSOrHiddenFile(info) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// Skip directories unless recurse is on, or this is the
+		// root directory
 		if info.IsDir() {
+			if recurse || path == folder {
+				return nil
+			} else {
+				return filepath.SkipDir
+			}
+		}
+
+		// Check (lowercased) extension against list of extensions
+		if extensions != nil && !extensions(strings.ToLower(filepath.Ext(path))) {
 			return nil
 		}
-		if !test(currentPath) {
-			return nil
-		}
-		currentFile, err := os.Open(currentPath)
+
+		// See if the file is readable by opening it
+		currentFile, err := os.Open(path)
 		if err != nil {
 			return nil
 		}
 		currentFile.Close()
 
-		*collector = append(*collector, currentPath)
+		*files = append(*files, path)
 		return nil
 	}
-	return walkFunc
+	return gohasissues.Walk(folder, walkFunc)
 }
 
 func AppendIfNotPresent(target []string, elements ...string) []string {
@@ -390,15 +358,6 @@ func AppendIfNotPresent(target []string, elements ...string) []string {
 		}
 	}
 	return target
-}
-
-func AddStringsToStringsSet(accumulator []string, stringsToAdd []string) []string {
-	previousStringsSet := SliceToMapStringBool(accumulator, true)
-	stringsSetToAdd := SliceToMapStringBool(stringsToAdd, true)
-
-	newStringsSet := MergeMapsOfStringBool(previousStringsSet, stringsSetToAdd)
-
-	return KeysOfMapOfStringBool(newStringsSet)
 }
 
 func EnsureFolderExists(folder string) error {
@@ -427,4 +386,79 @@ func NULLFile() string {
 func MD5Sum(data []byte) string {
 	md5sumBytes := md5.Sum(data)
 	return hex.EncodeToString(md5sumBytes[:])
+}
+
+type loggerAction struct {
+	onlyIfVerbose bool
+	level         string
+	format        string
+	args          []interface{}
+}
+
+func (l *loggerAction) Run(ctx *types.Context) error {
+	if !l.onlyIfVerbose || ctx.Verbose {
+		ctx.GetLogger().Println(l.level, l.format, l.args...)
+	}
+	return nil
+}
+
+func LogIfVerbose(level string, format string, args ...interface{}) types.Command {
+	return &loggerAction{true, level, format, args}
+}
+
+func LogThis(level string, format string, args ...interface{}) types.Command {
+	return &loggerAction{false, level, format, args}
+}
+
+// Returns the given string as a quoted string for use with the C
+// preprocessor. This adds double quotes around it and escapes any
+// double quotes and backslashes in the string.
+func QuoteCppString(str string) string {
+	str = strings.Replace(str, "\\", "\\\\", -1)
+	str = strings.Replace(str, "\"", "\\\"", -1)
+	return "\"" + str + "\""
+}
+
+// Parse a C-preprocessor string as emitted by the preprocessor. This
+// is a string contained in double quotes, with any backslashes or
+// quotes escaped with a backslash. If a valid string was present at the
+// start of the given line, returns the unquoted string contents, the
+// remaineder of the line (everything after the closing "), and true.
+// Otherwise, returns the empty string, the entire line and false.
+func ParseCppString(line string) (string, string, bool) {
+	// For details about how these strings are output by gcc, see:
+	// https://github.com/gcc-mirror/gcc/blob/a588355ab948cf551bc9d2b89f18e5ae5140f52c/libcpp/macro.c#L491-L511
+	// Note that the documentaiton suggests all non-printable
+	// characters are also escaped, but the implementation does not
+	// actually do this. See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=51259
+	if len(line) < 1 || line[0] != '"' {
+		return "", line, false
+	}
+
+	i := 1
+	res := ""
+	for {
+		if i >= len(line) {
+			return "", line, false
+		}
+
+		switch line[i] {
+		// Backslash, next character is used unmodified
+		case '\\':
+			i++
+			if i >= len(line) {
+				return "", line, false
+			}
+			res += string(line[i])
+			break
+		// Quote, end of string
+		case '"':
+			return res, line[i+1:], true
+		default:
+			res += string(line[i])
+			break
+		}
+
+		i++
+	}
 }

@@ -40,28 +40,24 @@ import (
 
 type PrototypesAdder struct{}
 
-func (s *PrototypesAdder) Run(context map[string]interface{}) error {
-	debugOutput := context[constants.CTX_DEBUG_PREPROCESSOR] != nil
-	source := context[constants.CTX_SOURCE].(string)
+func (s *PrototypesAdder) Run(ctx *types.Context) error {
+	debugOutput := ctx.DebugPreprocessor
+	source := ctx.Source
 
 	source = strings.Replace(source, "\r\n", "\n", -1)
 	source = strings.Replace(source, "\r", "\n", -1)
 
 	sourceRows := strings.Split(source, "\n")
 
-	if !utils.MapHas(context, constants.CTX_LINE_WHERE_TO_INSERT_PROTOTYPES) {
-		return nil
-	}
-
-	firstFunctionLine := context[constants.CTX_LINE_WHERE_TO_INSERT_PROTOTYPES].(int)
+	firstFunctionLine := ctx.PrototypesLineWhereToInsert
 	if isFirstFunctionOutsideOfSource(firstFunctionLine, sourceRows) {
 		return nil
 	}
 
-	insertionLine := firstFunctionLine + context[constants.CTX_LINE_OFFSET].(int) - 1
+	insertionLine := firstFunctionLine + ctx.LineOffset - 1
 	firstFunctionChar := len(strings.Join(sourceRows[:insertionLine], "\n")) + 1
-	prototypeSection := composePrototypeSection(firstFunctionLine, context[constants.CTX_PROTOTYPES].([]*types.Prototype))
-	context[constants.CTX_PROTOTYPE_SECTION] = prototypeSection
+	prototypeSection := composePrototypeSection(firstFunctionLine, ctx.Prototypes)
+	ctx.PrototypesSection = prototypeSection
 	source = source[:firstFunctionChar] + prototypeSection + source[firstFunctionChar:]
 
 	if debugOutput {
@@ -79,7 +75,7 @@ func (s *PrototypesAdder) Run(context map[string]interface{}) error {
 		}
 		fmt.Println("#END OF PREPROCESSED SOURCE")
 	}
-	context[constants.CTX_SOURCE] = source
+	ctx.Source = source
 
 	return nil
 }
@@ -92,7 +88,7 @@ func composePrototypeSection(line int, prototypes []*types.Prototype) string {
 	str := joinPrototypes(prototypes)
 	str += "\n#line "
 	str += strconv.Itoa(line)
-	str += " \"" + prototypes[0].File + "\""
+	str += " " + utils.QuoteCppString(prototypes[0].File)
 	str += "\n"
 
 	return str
@@ -104,7 +100,7 @@ func joinPrototypes(prototypes []*types.Prototype) string {
 		if signatureContainsaDefaultArg(proto) {
 			continue
 		}
-		prototypesSlice = append(prototypesSlice, "#line "+strconv.Itoa(proto.Line)+" \""+proto.File+"\"")
+		prototypesSlice = append(prototypesSlice, "#line "+strconv.Itoa(proto.Line)+" "+utils.QuoteCppString(proto.File))
 		prototypeParts := []string{}
 		if proto.Modifiers != "" {
 			prototypeParts = append(prototypeParts, proto.Modifiers)

@@ -30,10 +30,12 @@
 package types
 
 import (
-	"arduino.cc/builder/constants"
-	"arduino.cc/builder/props"
+	"os"
 	"path/filepath"
 	"strconv"
+
+	"arduino.cc/builder/constants"
+	"arduino.cc/properties"
 )
 
 type SketchFile struct {
@@ -62,13 +64,13 @@ type Sketch struct {
 }
 
 type Packages struct {
-	Properties props.PropertiesMap
+	Properties properties.Map
 	Packages   map[string]*Package
 }
 
 type Package struct {
 	PackageId  string
-	Properties props.PropertiesMap
+	Properties properties.Map
 	Platforms  map[string]*Platform
 }
 
@@ -77,13 +79,13 @@ type Platform struct {
 	Folder       string
 	DefaultBoard *Board
 	Boards       map[string]*Board
-	Properties   props.PropertiesMap
-	Programmers  map[string]props.PropertiesMap
+	Properties   properties.Map
+	Programmers  map[string]properties.Map
 }
 
 type Board struct {
 	BoardId    string
-	Properties props.PropertiesMap
+	Properties properties.Map
 }
 
 type Tool struct {
@@ -140,6 +142,10 @@ type PlatforKeysRewrite struct {
 	Rewrites []PlatforKeyRewrite
 }
 
+func (p *PlatforKeysRewrite) Empty() bool {
+	return len(p.Rewrites) == 0
+}
+
 type PlatforKeyRewrite struct {
 	Key      string
 	OldValue string
@@ -149,10 +155,6 @@ type PlatforKeyRewrite struct {
 type KeyValuePair struct {
 	Key   string
 	Value string
-}
-
-type Command interface {
-	Run(context map[string]interface{}) error
 }
 
 type Prototype struct {
@@ -173,9 +175,8 @@ type SourceFolder struct {
 }
 
 type LibraryResolutionResult struct {
-	Library               *Library
-	IsLibraryFromPlatform bool
-	NotUsedLibraries      []*Library
+	Library          *Library
+	NotUsedLibraries []*Library
 }
 
 type CTag struct {
@@ -201,7 +202,13 @@ func LibraryToSourceFolder(library *Library) []SourceFolder {
 	sourceFolders = append(sourceFolders, SourceFolder{Folder: library.SrcFolder, Recurse: recurse})
 	if library.Layout == LIBRARY_FLAT {
 		utility := filepath.Join(library.SrcFolder, constants.LIBRARY_FOLDER_UTILITY)
-		sourceFolders = append(sourceFolders, SourceFolder{Folder: utility, Recurse: false})
+		if info, err := os.Stat(utility); err == nil && info.IsDir() {
+			sourceFolders = append(sourceFolders, SourceFolder{Folder: utility, Recurse: false})
+		}
 	}
 	return sourceFolders
+}
+
+type Command interface {
+	Run(ctx *Context) error
 }

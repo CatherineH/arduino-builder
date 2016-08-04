@@ -30,7 +30,7 @@
 package builder
 
 import (
-	"arduino.cc/builder/constants"
+	"arduino.cc/builder/types"
 	"arduino.cc/builder/utils"
 	"regexp"
 	"strings"
@@ -39,18 +39,17 @@ import (
 var INCLUDE_REGEXP = regexp.MustCompile("(?ms)^\\s*#[ \t]*include\\s*[<\"](\\S+)[\">]")
 
 type IncludesFinderWithRegExp struct {
-	ContextField string
+	Source *string
 }
 
-func (s *IncludesFinderWithRegExp) Run(context map[string]interface{}) error {
-	source := context[s.ContextField].(string)
+func (s *IncludesFinderWithRegExp) Run(ctx *types.Context) error {
+	source := *s.Source
 
 	matches := INCLUDE_REGEXP.FindAllStringSubmatch(source, -1)
 	includes := []string{}
 	for _, match := range matches {
 		includes = append(includes, strings.TrimSpace(match[1]))
 	}
-
 	if len(includes) == 0 {
 		include := findIncludesForOldCompilers(source)
 		if include != "" {
@@ -58,24 +57,19 @@ func (s *IncludesFinderWithRegExp) Run(context map[string]interface{}) error {
 		}
 	}
 
-	context[constants.CTX_INCLUDES_JUST_FOUND] = includes
-
-	if !utils.MapHas(context, constants.CTX_INCLUDES) {
-		context[constants.CTX_INCLUDES] = includes
-		return nil
-	}
-
-	context[constants.CTX_INCLUDES] = utils.AddStringsToStringsSet(context[constants.CTX_INCLUDES].([]string), includes)
-
+	ctx.IncludesJustFound = includes
+	ctx.Includes = utils.AppendIfNotPresent(ctx.Includes, includes...)
 	return nil
 }
 
 func findIncludesForOldCompilers(source string) string {
-	firstLine := strings.Split(source, "\n")[0]
-	splittedLine := strings.Split(firstLine, ":")
-	for i, _ := range splittedLine {
-		if strings.Contains(splittedLine[i], "fatal error") {
-			return strings.TrimSpace(splittedLine[i+1])
+	lines := strings.Split(source, "\n")
+	for _, line := range lines {
+		splittedLine := strings.Split(line, ":")
+		for i, _ := range splittedLine {
+			if strings.Contains(splittedLine[i], "fatal error") {
+				return strings.TrimSpace(splittedLine[i+1])
+			}
 		}
 	}
 	return ""

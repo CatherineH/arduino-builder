@@ -30,33 +30,24 @@
 package builder
 
 import (
-	"arduino.cc/builder/constants"
-	"arduino.cc/builder/gohasissues"
+	"arduino.cc/builder/i18n"
 	"arduino.cc/builder/types"
 	"arduino.cc/builder/utils"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 type CollectAllSourceFilesFromFoldersWithSources struct{}
 
-func (s *CollectAllSourceFilesFromFoldersWithSources) Run(context map[string]interface{}) error {
-	foldersWithSources := context[constants.CTX_FOLDERS_WITH_SOURCES_QUEUE].(*types.UniqueSourceFolderQueue)
-	sourceFiles := context[constants.CTX_COLLECTED_SOURCE_FILES_QUEUE].(*types.UniqueStringQueue)
+func (s *CollectAllSourceFilesFromFoldersWithSources) Run(ctx *types.Context) error {
+	foldersWithSources := ctx.FoldersWithSourceFiles
+	sourceFiles := ctx.CollectedSourceFiles
+	extensions := func(ext string) bool { return ADDITIONAL_FILE_VALID_EXTENSIONS_NO_HEADERS[ext] }
 
 	filePaths := []string{}
 	for !foldersWithSources.Empty() {
 		sourceFolder := foldersWithSources.Pop().(types.SourceFolder)
-		var err error
-		if sourceFolder.Recurse {
-			err = collectByWalk(&filePaths, sourceFolder.Folder)
-		} else {
-			err = collectByReadDir(&filePaths, sourceFolder.Folder)
-		}
+		err := utils.FindFilesInFolder(&filePaths, sourceFolder.Folder, extensions, sourceFolder.Recurse)
 		if err != nil {
-			return utils.WrapError(err)
+			return i18n.WrapError(err)
 		}
 	}
 
@@ -64,34 +55,5 @@ func (s *CollectAllSourceFilesFromFoldersWithSources) Run(context map[string]int
 		sourceFiles.Push(filePath)
 	}
 
-	return nil
-}
-
-func collectByWalk(filePaths *[]string, folder string) error {
-	checkExtensionFunc := func(filePath string) bool {
-		name := filepath.Base(filePath)
-		ext := strings.ToLower(filepath.Ext(filePath))
-		return !strings.HasPrefix(name, ".") && ADDITIONAL_FILE_VALID_EXTENSIONS_NO_HEADERS[ext]
-	}
-	walkFunc := utils.CollectAllReadableFiles(filePaths, checkExtensionFunc)
-	err := gohasissues.Walk(folder, walkFunc)
-	return utils.WrapError(err)
-}
-
-func collectByReadDir(filePaths *[]string, folder string) error {
-	if _, err := os.Stat(folder); err != nil && os.IsNotExist(err) {
-		return nil
-	}
-
-	files, err := ioutil.ReadDir(folder)
-	if err != nil {
-		return utils.WrapError(err)
-	}
-	for _, file := range files {
-		ext := strings.ToLower(filepath.Ext(file.Name()))
-		if ADDITIONAL_FILE_VALID_EXTENSIONS_NO_HEADERS[ext] {
-			*filePaths = append(*filePaths, filepath.Join(folder, file.Name()))
-		}
-	}
 	return nil
 }

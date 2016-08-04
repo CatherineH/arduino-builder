@@ -31,16 +31,15 @@
 package builder
 
 import (
-	"arduino.cc/builder/constants"
 	"arduino.cc/builder/types"
+	"arduino.cc/builder/utils"
 	"regexp"
-	"strings"
 )
 
 type SketchSourceMerger struct{}
 
-func (s *SketchSourceMerger) Run(context map[string]interface{}) error {
-	sketch := context[constants.CTX_SKETCH].(*types.Sketch)
+func (s *SketchSourceMerger) Run(ctx *types.Context) error {
+	sketch := ctx.Sketch
 
 	lineOffset := 0
 	includeSection := ""
@@ -48,9 +47,9 @@ func (s *SketchSourceMerger) Run(context map[string]interface{}) error {
 		includeSection += "#include <Arduino.h>\n"
 		lineOffset++
 	}
-	includeSection += "#line 1 \"" + strings.Replace((&sketch.MainFile).Name, "\\", "\\\\", -1) + "\"\n"
+	includeSection += "#line 1 " + utils.QuoteCppString(sketch.MainFile.Name) + "\n"
 	lineOffset++
-	context[constants.CTX_INCLUDE_SECTION] = includeSection
+	ctx.IncludeSection = includeSection
 
 	source := includeSection
 	source += addSourceWrappedWithLineDirective(&sketch.MainFile)
@@ -59,8 +58,8 @@ func (s *SketchSourceMerger) Run(context map[string]interface{}) error {
 		source += addSourceWrappedWithLineDirective(&file)
 	}
 
-	context[constants.CTX_LINE_OFFSET] = lineOffset
-	context[constants.CTX_SOURCE] = source
+	ctx.LineOffset = lineOffset
+	ctx.Source = source
 
 	return nil
 }
@@ -74,7 +73,7 @@ func sketchIncludesArduinoH(sketch *types.SketchFile) bool {
 }
 
 func addSourceWrappedWithLineDirective(sketch *types.SketchFile) string {
-	source := "#line 1 \"" + strings.Replace(sketch.Name, "\\", "\\\\", -1) + "\"\n"
+	source := "#line 1 " + utils.QuoteCppString(sketch.Name) + "\n"
 	source += sketch.Source
 	source += "\n"
 

@@ -30,14 +30,16 @@
 package builder
 
 import (
-	"arduino.cc/builder/constants"
-	"arduino.cc/builder/phases"
-	"arduino.cc/builder/types"
-	"arduino.cc/builder/utils"
 	"os"
 	"reflect"
 	"strconv"
 	"time"
+
+	"arduino.cc/builder/constants"
+	"arduino.cc/builder/i18n"
+	"arduino.cc/builder/phases"
+	"arduino.cc/builder/types"
+	"arduino.cc/builder/utils"
 )
 
 var MAIN_FILE_VALID_EXTENSIONS = map[string]bool{".ino": true, ".pde": true}
@@ -66,10 +68,8 @@ const DEFAULT_BUILD_CORE = "arduino"
 
 type Builder struct{}
 
-func (s *Builder) Run(context map[string]interface{}) error {
+func (s *Builder) Run(ctx *types.Context) error {
 	commands := []types.Command{
-		&SetupHumanLoggerIfMissing{},
-
 		&GenerateBuildPathIfMissing{},
 		&EnsureBuildPathExists{},
 
@@ -83,25 +83,31 @@ func (s *Builder) Run(context map[string]interface{}) error {
 
 		&ContainerMergeCopySketchFiles{},
 
+		utils.LogIfVerbose(constants.LOG_LEVEL_INFO, "Detecting libraries used..."),
 		&ContainerFindIncludes{},
 
 		&WarnAboutArchIncompatibleLibraries{},
 
+		utils.LogIfVerbose(constants.LOG_LEVEL_INFO, "Generating function prototypes..."),
 		&ContainerAddPrototypes{},
 
+		utils.LogIfVerbose(constants.LOG_LEVEL_INFO, "Compiling sketch..."),
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_SKETCH_PREBUILD, Suffix: constants.HOOKS_PATTERN_SUFFIX},
 		&phases.SketchBuilder{},
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_SKETCH_POSTBUILD, Suffix: constants.HOOKS_PATTERN_SUFFIX},
 
+		utils.LogIfVerbose(constants.LOG_LEVEL_INFO, "Compiling libraries..."),
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_LIBRARIES_PREBUILD, Suffix: constants.HOOKS_PATTERN_SUFFIX},
 		&UnusedCompiledLibrariesRemover{},
 		&phases.LibrariesBuilder{},
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_LIBRARIES_POSTBUILD, Suffix: constants.HOOKS_PATTERN_SUFFIX},
 
+		utils.LogIfVerbose(constants.LOG_LEVEL_INFO, "Compiling core..."),
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_CORE_PREBUILD, Suffix: constants.HOOKS_PATTERN_SUFFIX},
 		&phases.CoreBuilder{},
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_CORE_POSTBUILD, Suffix: constants.HOOKS_PATTERN_SUFFIX},
 
+		utils.LogIfVerbose(constants.LOG_LEVEL_INFO, "Linking everything together..."),
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_LINKING_PRELINK, Suffix: constants.HOOKS_PATTERN_SUFFIX},
 		&phases.Linker{},
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_LINKING_POSTLINK, Suffix: constants.HOOKS_PATTERN_SUFFIX},
@@ -115,14 +121,14 @@ func (s *Builder) Run(context map[string]interface{}) error {
 		&RecipeByPrefixSuffixRunner{Prefix: constants.HOOKS_POSTBUILD, Suffix: constants.HOOKS_PATTERN_SUFFIX},
 	}
 
-	mainErr := runCommands(context, commands, true)
+	mainErr := runCommands(ctx, commands, true)
 
 	commands = []types.Command{
-		&PrintUsedAndNotUsedLibraries{},
+		&PrintUsedAndNotUsedLibraries{SketchError: mainErr != nil},
 
 		&PrintUsedLibrariesIfVerbose{},
 	}
-	otherErr := runCommands(context, commands, false)
+	otherErr := runCommands(ctx, commands, false)
 
 	if mainErr != nil {
 		return mainErr
@@ -133,10 +139,8 @@ func (s *Builder) Run(context map[string]interface{}) error {
 
 type Preprocess struct{}
 
-func (s *Preprocess) Run(context map[string]interface{}) error {
+func (s *Preprocess) Run(ctx *types.Context) error {
 	commands := []types.Command{
-		&SetupHumanLoggerIfMissing{},
-
 		&GenerateBuildPathIfMissing{},
 		&EnsureBuildPathExists{},
 
@@ -157,15 +161,13 @@ func (s *Preprocess) Run(context map[string]interface{}) error {
 		&PrintPreprocessedSource{},
 	}
 
-	return runCommands(context, commands, true)
+	return runCommands(ctx, commands, true)
 }
 
 type ParseHardwareAndDumpBuildProperties struct{}
 
-func (s *ParseHardwareAndDumpBuildProperties) Run(context map[string]interface{}) error {
+func (s *ParseHardwareAndDumpBuildProperties) Run(ctx *types.Context) error {
 	commands := []types.Command{
-		&SetupHumanLoggerIfMissing{},
-
 		&GenerateBuildPathIfMissing{},
 
 		&ContainerSetupHardwareToolsLibsSketchAndProps{},
@@ -173,57 +175,57 @@ func (s *ParseHardwareAndDumpBuildProperties) Run(context map[string]interface{}
 		&DumpBuildProperties{},
 	}
 
-	return runCommands(context, commands, true)
+	return runCommands(ctx, commands, true)
 }
 
-func runCommands(context map[string]interface{}, commands []types.Command, progressEnabled bool) error {
+func runCommands(ctx *types.Context, commands []types.Command, progressEnabled bool) error {
 	commandsLength := len(commands)
 	progressForEachCommand := float32(100) / float32(commandsLength)
 
 	progress := float32(0)
 	for _, command := range commands {
-		PrintRingNameIfDebug(context, command)
-		printProgressIfProgressEnabledAndMachineLogger(progressEnabled, context, progress)
-		err := command.Run(context)
+		PrintRingNameIfDebug(ctx, command)
+		printProgressIfProgressEnabledAndMachineLogger(progressEnabled, ctx, progress)
+		err := command.Run(ctx)
 		if err != nil {
-			return utils.WrapError(err)
+			return i18n.WrapError(err)
 		}
 		progress += progressForEachCommand
 	}
 
-	printProgressIfProgressEnabledAndMachineLogger(progressEnabled, context, 100)
+	printProgressIfProgressEnabledAndMachineLogger(progressEnabled, ctx, 100)
 
 	return nil
 }
 
-func printProgressIfProgressEnabledAndMachineLogger(progressEnabled bool, context map[string]interface{}, progress float32) {
+func printProgressIfProgressEnabledAndMachineLogger(progressEnabled bool, ctx *types.Context, progress float32) {
 	if !progressEnabled {
 		return
 	}
 
-	log := utils.Logger(context)
+	log := ctx.GetLogger()
 	if log.Name() == "machine" {
 		log.Println(constants.LOG_LEVEL_INFO, constants.MSG_PROGRESS, strconv.FormatFloat(float64(progress), 'f', 2, 32))
 	}
 }
 
-func PrintRingNameIfDebug(context map[string]interface{}, command types.Command) {
-	if utils.DebugLevel(context) >= 10 {
-		utils.Logger(context).Fprintln(os.Stdout, constants.LOG_LEVEL_DEBUG, constants.MSG_RUNNING_COMMAND, strconv.FormatInt(time.Now().Unix(), 10), reflect.Indirect(reflect.ValueOf(command)).Type().Name())
+func PrintRingNameIfDebug(ctx *types.Context, command types.Command) {
+	if ctx.DebugLevel >= 10 {
+		ctx.GetLogger().Fprintln(os.Stdout, constants.LOG_LEVEL_DEBUG, constants.MSG_RUNNING_COMMAND, strconv.FormatInt(time.Now().Unix(), 10), reflect.Indirect(reflect.ValueOf(command)).Type().Name())
 	}
 }
 
-func RunBuilder(context map[string]interface{}) error {
+func RunBuilder(ctx *types.Context) error {
 	command := Builder{}
-	return command.Run(context)
+	return command.Run(ctx)
 }
 
-func RunParseHardwareAndDumpBuildProperties(context map[string]interface{}) error {
+func RunParseHardwareAndDumpBuildProperties(ctx *types.Context) error {
 	command := ParseHardwareAndDumpBuildProperties{}
-	return command.Run(context)
+	return command.Run(ctx)
 }
 
-func RunPreprocess(context map[string]interface{}) error {
+func RunPreprocess(ctx *types.Context) error {
 	command := Preprocess{}
-	return command.Run(context)
+	return command.Run(ctx)
 }

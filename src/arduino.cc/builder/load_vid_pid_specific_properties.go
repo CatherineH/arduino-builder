@@ -30,30 +30,32 @@
 package builder
 
 import (
-	"arduino.cc/builder/constants"
-	"arduino.cc/builder/props"
-	"arduino.cc/builder/utils"
 	"strconv"
 	"strings"
+
+	"arduino.cc/builder/constants"
+	"arduino.cc/builder/i18n"
+	"arduino.cc/builder/types"
+	"arduino.cc/properties"
 )
 
 type LoadVIDPIDSpecificProperties struct{}
 
-func (s *LoadVIDPIDSpecificProperties) Run(context map[string]interface{}) error {
-	if !utils.MapHas(context, constants.CTX_VIDPID) {
+func (s *LoadVIDPIDSpecificProperties) Run(ctx *types.Context) error {
+	if ctx.USBVidPid == "" {
 		return nil
 	}
 
-	vidPid := context[constants.CTX_VIDPID].(string)
+	vidPid := ctx.USBVidPid
 	vidPid = strings.ToLower(vidPid)
 	vidPidParts := strings.Split(vidPid, "_")
 	vid := vidPidParts[0]
 	pid := vidPidParts[1]
 
-	buildProperties := context[constants.CTX_BUILD_PROPERTIES].(props.PropertiesMap)
+	buildProperties := ctx.BuildProperties
 	VIDPIDIndex, err := findVIDPIDIndex(buildProperties, vid, pid)
 	if err != nil {
-		return utils.WrapError(err)
+		return i18n.WrapError(err)
 	}
 	if VIDPIDIndex < 0 {
 		return nil
@@ -65,7 +67,7 @@ func (s *LoadVIDPIDSpecificProperties) Run(context map[string]interface{}) error
 	return nil
 }
 
-func findVIDPIDIndex(buildProperties props.PropertiesMap, vid, pid string) (int, error) {
+func findVIDPIDIndex(buildProperties properties.Map, vid, pid string) (int, error) {
 	for key, value := range buildProperties.SubTree(constants.BUILD_PROPERTIES_VID) {
 		if !strings.Contains(key, ".") {
 			if vid == strings.ToLower(value) && pid == strings.ToLower(buildProperties[constants.BUILD_PROPERTIES_PID+"."+key]) {
