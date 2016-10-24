@@ -30,10 +30,6 @@
 package utils
 
 import (
-	"arduino.cc/builder/constants"
-	"arduino.cc/builder/gohasissues"
-	"arduino.cc/builder/i18n"
-	"arduino.cc/builder/types"
 	"crypto/md5"
 	"encoding/hex"
 	"io/ioutil"
@@ -42,6 +38,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"arduino.cc/builder/constants"
+	"arduino.cc/builder/gohasissues"
+	"arduino.cc/builder/i18n"
+	"arduino.cc/builder/types"
 )
 
 func KeysOfMapOfStringInterface(input map[string]interface{}) []string {
@@ -148,7 +149,7 @@ func FilterFilesWithExtension(extension string) filterFiles {
 	}
 }
 
-var SOURCE_CONTROL_FOLDERS = map[string]bool{"CVS": true, "RCS": true, ".git": true, ".github": true, ".svn": true, ".hg": true, ".bzr": true}
+var SOURCE_CONTROL_FOLDERS = map[string]bool{"CVS": true, "RCS": true, ".git": true, ".github": true, ".svn": true, ".hg": true, ".bzr": true, ".vscode": true}
 
 func IsSCCSOrHiddenFile(file os.FileInfo) bool {
 	return IsSCCSFile(file) || IsHiddenFile(file)
